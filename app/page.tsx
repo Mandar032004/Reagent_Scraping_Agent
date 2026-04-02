@@ -7,6 +7,7 @@ import type { PoachedProfile } from '@/lib/parser'
 interface PoachMeta { urlsSearched: number; urlsScraped: number; creditsUsed: number }
 type SortKey = 'default' | 'confidence' | 'score' | 'name'
 interface LogEntry { ts: string; msg: string; type: 'info' | 'success' | 'error' | 'warn' }
+interface Toast { id: number; msg: string; type: 'success' | 'error' | 'warn' }
 
 /* ─── design tokens ──────────────────────────────────────────────────────── */
 const C = {
@@ -57,14 +58,6 @@ function scoreColor(s: number) {
     :             { bg: '#FEF2F2', text: '#B91C1C' }
 }
 
-const PIPELINE_STEPS = [
-  'Building dork queries',
-  'Querying search index',
-  'Firecrawl scraping pages',
-  'Gemini parsing profiles',
-  'Filtering & compiling',
-]
-
 function buildStages(limit: number) {
   const scrapeWall = Math.min(32000, 5000 + limit * 1800)
   return [
@@ -108,11 +101,24 @@ const STYLES = `
     to   { opacity: 1; transform: translateY(0) }
   }
   @keyframes cardReveal {
-    from { opacity: 0; transform: translateY(10px) }
-    to   { opacity: 1; transform: translateY(0) }
+    from { opacity: 0; transform: translateY(18px) scale(0.98) }
+    to   { opacity: 1; transform: translateY(0)    scale(1)    }
   }
   @keyframes spin { to { transform: rotate(360deg) } }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes shake {
+    0%,100% { transform: translateX(0) }
+    20%     { transform: translateX(-5px) }
+    40%     { transform: translateX(5px) }
+    60%     { transform: translateX(-4px) }
+    80%     { transform: translateX(4px) }
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(16px) }
+    to   { opacity: 1; transform: translateY(0) }
+  }
+  .shake { animation: shake 0.35s ease forwards !important }
+  .run-btn:active:not(:disabled) { transform: scale(0.98) !important }
 
   .shimmer-light {
     background: linear-gradient(90deg, #F3F4F6 0%, #E9EAED 40%, #F3F4F6 80%);
@@ -458,7 +464,7 @@ function ProfileCard({ profile, index }: { profile: PoachedProfile; index: numbe
             {/* skill matrix */}
             {profile.skills && Object.values(profile.skills).some(a => a.length > 0) && (
               <div>
-                <div className="card-section-label">Skills</div>
+                <div className="card-section-label">Top Skills</div>
                 <div className="space-y-2">
                   {(Object.entries(profile.skills) as [keyof typeof SKILL_BG, string[]][])
                     .filter(([, arr]) => arr.length > 0)
@@ -510,7 +516,7 @@ function ProfileCard({ profile, index }: { profile: PoachedProfile; index: numbe
             {/* projects */}
             {(profile.projects?.length ?? 0) > 0 && (
               <div>
-                <div className="card-section-label">Projects</div>
+                <div className="card-section-label">Project Highlights</div>
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} className="space-y-1">
                   {profile.projects!.map((proj, i) => (
                     <li key={i} style={{ fontFamily: "'Inter',sans-serif", fontSize: 12, color: C.onLight2, display: 'flex', gap: 6 }}>
@@ -622,13 +628,21 @@ function ResultsToolbar({ sortBy, onSort, total, onCopyJSON, onCopyCSV, copiedJS
 }
 
 /* ─── ActivityPanel ──────────────────────────────────────────────────────── */
-function ActivityPanel({ logs, meta, count, loading, stage }: {
-  logs: LogEntry[]; meta: PoachMeta | null; count: number; loading: boolean; stage: number
+function ActivityPanel({ logs, meta, count, loading, stage, role }: {
+  logs: LogEntry[]; meta: PoachMeta | null; count: number; loading: boolean; stage: number; role: string
 }) {
   const logRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs])
+
+  const pipelineSteps = [
+    role ? `Generating dorks for "${role}"` : 'Generating dork queries',
+    'Querying search index',
+    'Firecrawl scraping pages',
+    'Gemini vibe check & parsing',
+    'Filtering & compiling',
+  ]
 
   const logColor: Record<LogEntry['type'], string> = {
     info:    '#6B7280',
@@ -647,17 +661,17 @@ function ActivityPanel({ logs, meta, count, loading, stage }: {
 
       <div style={{ padding: '14px 16px 12px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <div style={{ fontFamily: "'Inter',sans-serif", fontSize: 11, fontWeight: 700, color: C.onLight4, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          Activity
+          Live Status
         </div>
       </div>
 
       {/* pipeline steps */}
       <div style={{ padding: '16px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-        {PIPELINE_STEPS.map((step, i) => {
-          const done = i < stage || (!loading && stage >= PIPELINE_STEPS.length - 1 && i <= stage)
+        {pipelineSteps.map((step, i) => {
+          const done = i < stage || (!loading && stage >= pipelineSteps.length - 1 && i <= stage)
           const active = loading && i === stage
           return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < PIPELINE_STEPS.length - 1 ? 10 : 0 }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < pipelineSteps.length - 1 ? 10 : 0 }}>
               <div style={{
                 width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
                 background: done ? C.indigo : active ? C.indigoLt : C.greyBg,
@@ -732,6 +746,34 @@ function ActivityPanel({ logs, meta, count, loading, stage }: {
   )
 }
 
+/* ─── ToastContainer ─────────────────────────────────────────────────────── */
+const TOAST_COLORS: Record<Toast['type'], { bg: string; text: string; border: string }> = {
+  success: { bg: '#DCFCE7', text: '#15803D', border: '#86EFAC' },
+  error:   { bg: '#FEF2F2', text: '#B91C1C', border: '#FECACA' },
+  warn:    { bg: '#FEF3C7', text: '#B45309', border: '#FDE68A' },
+}
+function ToastContainer({ toasts }: { toasts: Toast[] }) {
+  return (
+    <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
+      {toasts.map(t => {
+        const col = TOAST_COLORS[t.type]
+        return (
+          <div key={t.id} style={{
+            background: col.bg, color: col.text, border: `1px solid ${col.border}`,
+            borderRadius: 8, padding: '10px 16px',
+            fontFamily: "'Inter',sans-serif", fontSize: 13, fontWeight: 500,
+            boxShadow: '0 4px 16px rgba(0,0,0,.12)',
+            animation: 'toastIn 0.25s cubic-bezier(0.22,1,0.36,1) forwards',
+            maxWidth: 340, lineHeight: 1.4,
+          }}>
+            {t.msg}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ─── Label ──────────────────────────────────────────────────────────────── */
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -757,6 +799,17 @@ export default function Home() {
   const [loading,     setLoading]     = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [stage,       setStage]       = useState(0)
+
+  /* toast state */
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const showToast = useCallback((msg: string, type: Toast['type'] = 'error') => {
+    const id = Date.now()
+    setToasts(prev => [...prev, { id, msg, type }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
+  }, [])
+
+  /* shake validation state */
+  const [shake, setShake] = useState({ role: false, location: false })
 
   /* results state */
   const [profiles,   setProfiles]   = useState<PoachedProfile[]>([])
@@ -842,6 +895,7 @@ export default function Home() {
       if (!res.ok) {
         setError(data.error ?? 'Something went wrong.')
         addLog(`Error: ${data.error ?? 'Unknown error'}`, 'error')
+        showToast(data.error ?? 'API error — check your environment variables', 'error')
       } else {
         const count = data.profiles?.length ?? 0
         const urlCount = data.meta?.urlsSearched ?? 0
@@ -863,6 +917,7 @@ export default function Home() {
 
         if (urlCount === 0) {
           addLog('Serper returned 0 URLs — check the debug panel below', 'warn')
+          showToast('Serper returned 0 results — try a broader role or location', 'warn')
         } else if (count > 0) {
           addLog(`Found ${count} matching profile${count > 1 ? 's' : ''} from ${urlCount} URLs`, 'success')
         } else {
@@ -872,18 +927,23 @@ export default function Home() {
     } catch {
       setError('Network error — could not reach the server.')
       addLog('Network error — could not reach the server', 'error')
+      showToast('Network error — could not reach the server', 'error')
     }
-  }, [role, location, limit, deepDive, jobDescription, expNum, hasJD, addLog])
+  }, [role, location, limit, deepDive, jobDescription, expNum, hasJD, addLog, showToast])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!role.trim() || !location.trim()) return
+    if (!role.trim() || !location.trim()) {
+      setShake({ role: !role.trim(), location: !location.trim() })
+      setTimeout(() => setShake({ role: false, location: false }), 400)
+      return
+    }
     setActivityLogs([])
     addLog(`Searching for "${role}" in ${location}${hasJD ? ' with JD matching' : ''}`)
     setLoading(true); setError(null); setProfiles([]); setMeta(null); setSortBy('default'); setHasMore(false); setDebugDorks(null)
     await doFetch(0, false)
     setLoading(false)
-  }, [doFetch, role, location, hasJD, addLog])
+  }, [doFetch, role, location, hasJD, addLog, showToast])
 
   const handleLoadMore = useCallback(async () => {
     setLoadingMore(true); setError(null)
@@ -962,14 +1022,18 @@ export default function Home() {
 
               <div>
                 <FieldLabel>Role</FieldLabel>
-                <input className="rg-input" type="text" value={role} onChange={e => setRole(e.target.value)}
-                  placeholder="e.g. AI Engineer" required disabled={loading} />
+                <input className={`rg-input${shake.role ? ' shake' : ''}`} type="text" value={role}
+                  onChange={e => setRole(e.target.value)}
+                  placeholder="e.g. AI Engineer" disabled={loading}
+                  style={{ borderColor: shake.role ? C.red : undefined }} />
               </div>
 
               <div>
                 <FieldLabel>Location</FieldLabel>
-                <input className="rg-input" type="text" value={location} onChange={e => setLocation(e.target.value)}
-                  placeholder="e.g. Mumbai" required disabled={loading} />
+                <input className={`rg-input${shake.location ? ' shake' : ''}`} type="text" value={location}
+                  onChange={e => setLocation(e.target.value)}
+                  placeholder="e.g. Mumbai" disabled={loading}
+                  style={{ borderColor: shake.location ? C.red : undefined }} />
               </div>
 
               <div>
@@ -1058,14 +1122,15 @@ export default function Home() {
                   Search Parameters
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                  {[
-                    { l: 'Role', v: role, s: setRole, ph: 'e.g. AI Engineer' },
-                    { l: 'Location', v: location, s: setLocation, ph: 'e.g. Mumbai' },
-                  ].map(({ l, v, s, ph }) => (
+                  {([
+                    { l: 'Role', v: role, s: setRole, ph: 'e.g. AI Engineer', shk: shake.role },
+                    { l: 'Location', v: location, s: setLocation, ph: 'e.g. Mumbai', shk: shake.location },
+                  ] as { l: string; v: string; s: (v: string) => void; ph: string; shk: boolean }[]).map(({ l, v, s, ph, shk }) => (
                     <div key={l}>
                       <FieldLabel>{l}</FieldLabel>
-                      <input className="rg-input" type="text" value={v} onChange={e => s(e.target.value)}
-                        placeholder={ph} disabled={loading} />
+                      <input className={`rg-input${shk ? ' shake' : ''}`} type="text" value={v}
+                        onChange={e => s(e.target.value)} placeholder={ph} disabled={loading}
+                        style={{ borderColor: shk ? C.red : undefined }} />
                     </div>
                   ))}
                 </div>
@@ -1078,16 +1143,26 @@ export default function Home() {
                   <LimitBar value={limit} onChange={setLimit} disabled={loading} />
                 </div>
                 <Toggle active={deepDive} onToggle={() => setDeepDive(v => !v)} label="Deep Scan" disabled={loading} />
-                <button type="button"
+                <button type="button" className="run-btn"
                   onClick={e => handleSubmit(e as unknown as React.FormEvent)}
-                  disabled={loading || !role.trim() || !location.trim()}
+                  disabled={loading}
                   style={{
                     width: '100%', marginTop: 12, fontFamily: "'Inter',sans-serif", fontSize: 13, fontWeight: 700,
-                    background: (canSubmit) ? C.indigo : C.greyBg,
-                    color: (canSubmit) ? '#fff' : '#9CA3AF',
-                    border: 'none', borderRadius: 6, padding: '12px', cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    background: canSubmit ? C.indigo : C.greyBg,
+                    color: canSubmit ? '#fff' : '#9CA3AF',
+                    border: 'none', borderRadius: 6, padding: '12px',
+                    cursor: canSubmit ? 'pointer' : 'not-allowed',
+                    transition: 'background 0.15s, transform 0.1s',
                   }}>
-                  {loading ? 'Scanning…' : `Run Search · ${limit}`}
+                  {loading ? (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <svg style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }} width="14" height="14" viewBox="0 0 24 24" fill="none">
+                        <circle style={{ opacity: 0.2 }} cx="12" cy="12" r="10" stroke="white" strokeWidth="3" />
+                        <path style={{ opacity: 0.9 }} fill="white" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                      Scanning…
+                    </span>
+                  ) : `Run Search · ${limit}`}
                 </button>
               </div>
             </div>
@@ -1132,7 +1207,7 @@ export default function Home() {
                     </svg>
                   </div>
                   <h2 style={{ fontFamily: "'Inter',sans-serif", fontSize: 20, fontWeight: 800, color: C.black, marginBottom: 8 }}>
-                    Find your next hire
+                    Ready to find your next hire
                   </h2>
                   <p style={{ fontFamily: "'Inter',sans-serif", fontSize: 14, color: C.onLight3, lineHeight: 1.6, marginBottom: 20 }}>
                     Enter a role and location in the sidebar. Optionally paste a job description above to get AI-scored match results.
@@ -1247,11 +1322,13 @@ export default function Home() {
           {/* ── RIGHT ACTIVITY PANEL ── */}
           <ActivityPanel
             logs={activityLogs} meta={meta} count={profiles.length}
-            loading={loading} stage={stage}
+            loading={loading} stage={stage} role={role}
           />
 
         </div>
       </div>
+
+      <ToastContainer toasts={toasts} />
     </>
   )
 }

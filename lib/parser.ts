@@ -81,7 +81,7 @@ Job Description to score against:
 ${jobDescription.slice(0, 2000)}
 """
 - similarityScore: integer 0-100 measuring how well this candidate fits the above JD
-- similarityReason: one sentence explaining the score`
+- similarityReason: 2–3 sentences. Start with "Picked because:" then cite: (a) their years of experience relevant to the requested role, (b) at least 2 specific skills or technologies from the Job Description that appear in their profile, (c) one specific project or achievement that is directly relevant. Be concrete — reference actual names from the content, not generic praise.`
       : `- similarityScore: null
 - similarityReason: null`
 
