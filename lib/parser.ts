@@ -2,8 +2,6 @@ import { GoogleGenAI } from '@google/genai'
 import { z } from 'zod'
 import { zodToJsonSchema } from 'zod-to-json-schema'
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
-
 /* ─── Schema ─────────────────────────────────────────────────────────────── */
 
 export const ExperienceEntrySchema = z.object({
@@ -72,6 +70,7 @@ export async function parseProfile(
   requestedRole: string,
   jobDescription?: string
 ): Promise<PoachedProfile | null> {
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
   try {
     const truncated = markdown.slice(0, 8000)
 

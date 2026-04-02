@@ -1,8 +1,7 @@
 import Firecrawl from '@mendable/firecrawl-js'
 
-const app = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })
-
 export async function scrapeUrl(url: string): Promise<string | null> {
+  const app = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })
   try {
     const doc = await app.scrape(url, {
       formats: ['markdown'],
@@ -19,6 +18,7 @@ export async function scrapeUrl(url: string): Promise<string | null> {
 /** Deep Scan: waits for JS to render + scrolls to capture lazy-loaded content.
  *  Uses ~2× the time of a standard scrape (up to 60s). */
 export async function deepScrapeUrl(url: string): Promise<string | null> {
+  const app = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })
   try {
     const doc = await app.scrape(url, {
       formats: ['markdown'],

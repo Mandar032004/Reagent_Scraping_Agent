@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { generateDorks } from '@/lib/dorker'
 import { searchAllDorks } from '@/lib/serper'
